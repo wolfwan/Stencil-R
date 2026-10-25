@@ -8,15 +8,17 @@ stay attached to the rest of the stencil without blocking spray flow.
 
 The stencil is built in two extruded layers instead of one:
 
-- **Bottom layer (0 -> BASE_HEIGHT):** field + islands + bridges are all fused into
-  a single connected solid. This is what gives the part structural integrity.
-- **Top layer (BASE_HEIGHT -> BASE_HEIGHT + TOP_HEIGHT):** field and islands are
-  extruded *separately*, with no bridge material. Each island's top layer sits on
-  top of its own footprint from the bottom layer, so it stays attached, but there's
-  an open gap directly above every bridge.
+- **Bottom layer (0 -> TOP_HEIGHT), facing the surface being sprayed:** field and
+  islands are extruded *separately*, with no bridge material. Each island's bottom
+  layer sits under its own footprint from the top layer, so it stays attached, but
+  there's an open gap directly below every bridge.
+- **Top layer (TOP_HEIGHT -> TOP_HEIGHT + BASE_HEIGHT), away from the surface:**
+  field + islands + bridges are all fused into a single connected solid. This is
+  what gives the part structural integrity, kept away from the sprayed surface.
 
-Net effect: paint can drift under each bridge and still hit the surface, instead of
-leaving a hard bridge-shaped shadow line the way a single-layer bridge would.
+Net effect: paint can drift to the side before it would otherwise be blocked by a
+bridge, instead of leaving a hard bridge-shaped shadow line the way a single-layer
+bridge would.
 
 ## Project layout
 

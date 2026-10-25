@@ -1,13 +1,14 @@
 """Build the final watertight mesh using the two-layer bridging technique.
 
-Layer 1 (z: 0 -> base_height_mm): field + all bridged islands + all bridges,
-    unioned into a single connected 2D footprint, then extruded. This is the
-    structural layer - it's what actually holds the islands in place.
-Layer 2 (z: base_height_mm -> base_height_mm + top_height_mm): field extruded
-    on its own, and each bridged island extruded on its own (NOT unioned with
-    field, NOT including bridges) - they only stay attached because they
-    share footprint with layer 1 beneath them. This is what leaves the open
-    gap above each bridge for paint to pass through.
+Layer 1 (z: 0 -> top_height_mm, the layer facing the surface being sprayed):
+    field extruded on its own, and each bridged island extruded on its own
+    (NOT unioned with field, NOT including bridges) - they only stay attached
+    because they share footprint with layer 2 above. This is what leaves the
+    open gap below each bridge for paint to pass through.
+Layer 2 (z: top_height_mm -> top_height_mm + base_height_mm, the far layer):
+    field + all bridged islands + all bridges, unioned into a single
+    connected 2D footprint, then extruded. This is the structural layer -
+    it's what actually holds the islands in place, away from the surface.
 
 Islands with no valid bridge (see bridging.py) are dropped from the mesh
 entirely rather than left as unattached floating geometry - the corresponding
@@ -72,18 +73,20 @@ def build_mesh(
 
     bridge_polys = [poly for idx, _ in bridged_islands for poly in bridges[idx]]
 
-    layer1_footprint = unary_union([field.polygon] + [r.polygon for _, r in bridged_islands] + bridge_polys)
-    layer1_meshes = [_extrude(poly, base_height_mm) for poly in _flatten(layer1_footprint)]
+    # Layer 1: open layer, no bridges, sits against the sprayed surface.
+    layer1_meshes = [_extrude(field.polygon, top_height_mm)]
+    layer1_meshes += [_extrude(r.polygon, top_height_mm) for _, r in bridged_islands]
 
-    layer2_meshes = [_extrude(field.polygon, top_height_mm, z_offset=base_height_mm)]
-    layer2_meshes += [_extrude(r.polygon, top_height_mm, z_offset=base_height_mm) for _, r in bridged_islands]
+    # Layer 2: fused structural layer with bridges, stacked above layer 1.
+    layer2_footprint = unary_union([field.polygon] + [r.polygon for _, r in bridged_islands] + bridge_polys)
+    layer2_meshes = [_extrude(poly, base_height_mm, z_offset=top_height_mm) for poly in _flatten(layer2_footprint)]
 
     mesh = trimesh.boolean.union(layer1_meshes + layer2_meshes, engine="manifold")
 
     if not mesh.is_watertight:
         logger.warning(
             "Generated stencil mesh is not watertight (bounds=%s). This usually means the "
-            "layer-1 union of field+islands+bridges wasn't a single clean polygon.",
+            "layer-2 union of field+islands+bridges wasn't a single clean polygon.",
             mesh.bounds.tolist(),
         )
 

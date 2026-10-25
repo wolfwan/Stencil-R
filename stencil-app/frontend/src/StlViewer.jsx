@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -6,6 +6,10 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 /** Renders an STL (as ArrayBuffer) with an orbit-controlled three.js preview. */
 export default function StlViewer({ stlArrayBuffer }) {
   const containerRef = useRef(null);
+  const sceneRef = useRef(null); // holds camera/controls/mesh/material/initialView for the toolbar
+
+  const [wireframe, setWireframe] = useState(false);
+  const [autoRotate, setAutoRotate] = useState(false);
 
   useEffect(() => {
     if (!stlArrayBuffer || !containerRef.current) return;
@@ -43,12 +47,17 @@ export default function StlViewer({ stlArrayBuffer }) {
 
     geometry.computeBoundingSphere();
     const radius = geometry.boundingSphere?.radius || 50;
-    camera.position.set(radius * 1.8, radius * 1.4, radius * 1.8);
+    const initialPosition = new THREE.Vector3(radius * 1.8, radius * 1.4, radius * 1.8);
+    camera.position.copy(initialPosition);
     camera.lookAt(0, 0, 0);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
     controls.enableDamping = true;
+    controls.autoRotate = false;
+    controls.autoRotateSpeed = 4;
+
+    sceneRef.current = { camera, controls, material, initialPosition, radius };
 
     let frameId;
     const animate = () => {
@@ -75,8 +84,57 @@ export default function StlViewer({ stlArrayBuffer }) {
       geometry.dispose();
       material.dispose();
       container.removeChild(renderer.domElement);
+      sceneRef.current = null;
     };
   }, [stlArrayBuffer]);
 
-  return <div ref={containerRef} className="stl-viewer" />;
+  // Keep the live scene's wireframe/auto-rotate flags synced to the toolbar state.
+  useEffect(() => {
+    if (sceneRef.current) sceneRef.current.material.wireframe = wireframe;
+  }, [wireframe, stlArrayBuffer]);
+
+  useEffect(() => {
+    if (sceneRef.current) sceneRef.current.controls.autoRotate = autoRotate;
+  }, [autoRotate, stlArrayBuffer]);
+
+  const resetView = () => {
+    const live = sceneRef.current;
+    if (!live) return;
+    live.camera.position.copy(live.initialPosition);
+    live.controls.target.set(0, 0, 0);
+    live.camera.updateProjectionMatrix();
+  };
+
+  const zoomBy = (factor) => {
+    const live = sceneRef.current;
+    if (!live) return;
+    const { camera, controls } = live;
+    const toTarget = camera.position.clone().sub(controls.target);
+    toTarget.multiplyScalar(factor);
+    camera.position.copy(controls.target).add(toTarget);
+  };
+
+  return (
+    <div className="stl-viewer-wrap">
+      <div ref={containerRef} className="stl-viewer" />
+      <div className="viewer-toolbar">
+        <button type="button" onClick={() => zoomBy(0.8)} title="Zoom in">
+          +
+        </button>
+        <button type="button" onClick={() => zoomBy(1.25)} title="Zoom out">
+          −
+        </button>
+        <button type="button" onClick={resetView}>
+          Reset view
+        </button>
+        <button type="button" className={wireframe ? "active" : ""} onClick={() => setWireframe((w) => !w)}>
+          Wireframe
+        </button>
+        <button type="button" className={autoRotate ? "active" : ""} onClick={() => setAutoRotate((r) => !r)}>
+          Auto-rotate
+        </button>
+      </div>
+      <p className="viewer-hint">Drag to rotate · Scroll to zoom · Right-click drag (or two-finger drag) to pan</p>
+    </div>
+  );
 }
